@@ -24,7 +24,10 @@ class GoRouterService {
   final List<GoRoute> routes = [
     GoRoute(path: '/', builder: (context, state) => const HomeScreen()),
     GoRoute(path: '/page1', builder: (context, state) => const Page1Screen()),
-    GoRoute(path: '/document/:id', builder: (context, state) => Page2Screen(highlightedId: state.pathParameters['id'])),
+    GoRoute(
+      path: '/document/:id',
+      builder: (context, state) => DocumentScreen(highlightedId: state.pathParameters['id']),
+    ),
     GoRoute(path: '/login', builder: (context, state) => LoginPage()),
   ];
 
@@ -32,8 +35,7 @@ class GoRouterService {
     final isLoggedIn = authRepository.user != null;
 
     final path = state.matchedLocation;
-
-    final isDeeplink = state.uri.authority.isNotEmpty;
+    final isDeeplink = state.uri.hasAuthority;
 
     if (isLoggedIn) {
       if (path.startsWith('/login')) {
@@ -109,6 +111,12 @@ class HomeScreen extends ConsumerWidget {
               child: const Text('Log out'),
             ),
           ),
+          ElevatedButton(
+            onPressed: () {
+              context.push('https://example.com/documents?highlighted=doc1234');
+            },
+            child: Text('Test'),
+          ),
         ],
       ),
     ),
@@ -121,12 +129,12 @@ class Page1Screen extends StatelessWidget {
   Widget build(BuildContext context) => const Scaffold(body: Center(child: Text('Page 1')));
 }
 
-class Page2Screen extends StatelessWidget {
-  const Page2Screen({super.key, this.highlightedId});
+class DocumentScreen extends ConsumerWidget {
+  const DocumentScreen({super.key, this.highlightedId});
   final String? highlightedId;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       appBar: AppBar(title: Text('Document screen')),
       body: Center(
