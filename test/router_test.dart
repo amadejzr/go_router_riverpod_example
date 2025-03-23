@@ -23,37 +23,91 @@ void main() {
   });
 
   GoRouterState buildState(String location) {
+    final uri = Uri.parse(location);
+
     return GoRouterState(
       configuration,
-      matchedLocation: location,
-      uri: Uri.parse(location),
+      matchedLocation: uri.path,
+      uri: uri,
       pathParameters: const {},
-      extra: null,
-      name: null,
       fullPath: location,
       pageKey: ValueKey(location),
     );
   }
 
   group('GoRouterService.redirect', () {
-    test('redirects to /login if not logged in and trying to access /page1', () {
-      when(authRepository.user).thenAnswer((_) => User(username: '123'));
-      final state = buildState('/documents/abc123?highlighted=doc456');
-      final result = service.redirect(context, state);
-      expect(result, '/document/doc456');
+    group('When user is logged in', () {
+      test('Redirects to parsed link from link', () {
+        when(authRepository.user).thenAnswer((_) => User(username: '123'));
+        final state = buildState('https://example.com/documents?highlighted=doc1234');
+        final result = service.redirect(context, state);
+        expect(result, '/document/doc1234');
+      });
+
+      test('Does not redirect if route is valid in app', () {
+        when(authRepository.user).thenAnswer((_) => User(username: '123'));
+        final state = buildState('https://example.com/document/123');
+        final result = service.redirect(context, state);
+        expect(result, isNull);
+      });
+
+      test('Redirects to document from link', () {
+        when(authRepository.user).thenAnswer((_) => User(username: '123'));
+        final state = buildState('https://example.com/documents?highlighted=doc1234');
+        final result = service.redirect(context, state);
+        expect(result, '/document/doc1234');
+      });
+
+      test('User logs out', () {
+        when(authRepository.user).thenAnswer((_) => User(username: '123'));
+        var state = buildState('https://example.com/documents?highlighted=doc1234');
+        var result = service.redirect(context, state);
+
+        when(authRepository.user).thenAnswer((_) => null);
+        state = buildState(result!);
+        result = service.redirect(context, state);
+        expect(result, '/login');
+      });
     });
 
-    test('redirects to /login if not logged in and trying to access /page1', () {
-      when(authRepository.user).thenAnswer((_) => null);
-      final loginState = buildState('/documents/abc123?highlighted=doc456');
-      final result = service.redirect(context, loginState);
-      expect(result, startsWith('/login?from'));
+    group('When user is NOT logged in', () {
+      test('Redirects to login screen', () {
+        when(authRepository.user).thenAnswer((_) => null);
+        final state = buildState('/');
+        final result = service.redirect(context, state);
+        expect(result, '/login');
+      });
 
-      when(authRepository.user).thenAnswer((_) => User(username: '123'));
+      test('Redirects to login with "from" param from link', () {
+        when(authRepository.user).thenAnswer((_) => null);
+        final state = buildState('https://example.com/documents?highlighted=doc1234');
+        final result = service.redirect(context, state);
+        expect(result, '/login?from=/document/doc1234');
+      });
 
-      final afterLoginState = buildState(result!);
-      final afterLoginResult = service.redirect(context, afterLoginState);
-      expect(afterLoginResult, startsWith('/document'));
+      test('Redirect chain: not logged in → login → logged in → final route', () {
+        when(authRepository.user).thenAnswer((_) => null);
+        var state = buildState('https://example.com/documents?highlighted=doc1234');
+        var result = service.redirect(context, state);
+        expect(result, '/login?from=/document/doc1234');
+
+        // Simulate user logging in
+        when(authRepository.user).thenAnswer((_) => User(username: '123'));
+        state = buildState(result!);
+        result = service.redirect(context, state);
+        expect(result, '/document/doc1234');
+      });
+
+      test('Redirects unauthenticated user to login and resumes navigation to a valid route after login', () {
+        when(authRepository.user).thenAnswer((_) => null);
+        var state = buildState('https://example.com/document/123');
+        var result = service.redirect(context, state);
+        expect(result, '/login?from=/document/123');
+
+        state = buildState(result!);
+        result = service.redirect(context, state);
+        expect(result, isNull);
+      });
     });
   });
 }

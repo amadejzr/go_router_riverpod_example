@@ -19,59 +19,64 @@ class GoRouterService {
 
   final AuthRepository authRepository;
 
-  final initialLocation = '/';
+  final initialLocation = '/login';
 
   final List<GoRoute> routes = [
     GoRoute(path: '/', builder: (context, state) => const HomeScreen()),
     GoRoute(path: '/page1', builder: (context, state) => const Page1Screen()),
-    GoRoute(
-      path: '/document/:id',
-      builder: (context, state) => Page2Screen(highlightedId: state.uri.queryParameters['id']),
-    ),
-    GoRoute(
-      path: '/document/:id',
-      builder: (context, state) => Page2Screen(highlightedId: state.uri.queryParameters['id']),
-    ),
+    GoRoute(path: '/document/:id', builder: (context, state) => Page2Screen(highlightedId: state.pathParameters['id'])),
     GoRoute(path: '/login', builder: (context, state) => LoginPage()),
   ];
 
   String? redirect(BuildContext context, GoRouterState state) {
-    final isLoginPage = state.matchedLocation.startsWith('/login');
-
     final isLoggedIn = authRepository.user != null;
 
-    final docPath = _extractDocumentPath(state.matchedLocation);
+    final path = state.matchedLocation;
 
-    if (!isLoggedIn) {
-      if (!isLoginPage) {
-        if (docPath != null) {
-          return '/login?from=$docPath';
+    final isDeeplink = state.uri.authority.isNotEmpty;
+
+    if (isLoggedIn) {
+      if (path.startsWith('/login')) {
+        if (state.uri.queryParameters['from'] != null) {
+          return state.uri.queryParameters['from'];
         }
-        return '/login?from=${state.matchedLocation}';
+        return '/';
       }
-      return null;
-    }
 
-    if (isLoginPage) {
-      final from = state.uri.queryParameters['from'];
-      return from ?? '/';
-    }
+      if (isDeeplink) {
+        final a = _extractDocumentPath(state.uri);
 
-    if (docPath != null && docPath != state.matchedLocation) {
-      return docPath;
+        if (a != null) {
+          return a;
+        }
+      }
+    } else {
+      if (path == '/' || path.startsWith('/document') || path.startsWith('/page1')) {
+        if (isDeeplink) {
+          final a = _extractDocumentPath(state.uri);
+
+          if (a != null) {
+            return '/login?from=$a';
+          }
+
+          return '/login?from=${state.matchedLocation}';
+        }
+        return '/login';
+      }
     }
 
     return null;
   }
 
-  GoRouter get router =>
-      GoRouter(routes: routes, redirect: redirect, refreshListenable: authRepository.authStateListenable);
+  GoRouter get router => GoRouter(
+    routes: routes,
+    redirect: redirect,
+    refreshListenable: authRepository.authStateListenable,
+    initialLocation: initialLocation,
+    errorBuilder: (context, state) => ErrorScreen(),
+  );
 
-  String? _extractDocumentPath(String urlPathAndQuery) {
-    final uri = Uri.parse(urlPathAndQuery);
-
-    if (!uri.path.startsWith('/documents/')) return null;
-
+  String? _extractDocumentPath(Uri uri) {
     final highlighted = uri.queryParameters['highlighted'];
     if (highlighted == null || highlighted.isEmpty) return null;
 
@@ -88,12 +93,21 @@ class HomeScreen extends ConsumerWidget {
       appBar: AppBar(title: const Text('Home')),
       body: Column(
         children: [
-          const Center(child: Text('Home')),
-          ElevatedButton(
-            onPressed: () {
-              ref.read(authRepositoryProvider).logOut();
-            },
-            child: const Text('Log out'),
+          Center(
+            child: ElevatedButton(
+              onPressed: () {
+                ref.read(goRouterProvider).go('/document/123421');
+              },
+              child: const Text('Document screen'),
+            ),
+          ),
+          Center(
+            child: ElevatedButton(
+              onPressed: () {
+                ref.read(authRepositoryProvider).logOut();
+              },
+              child: const Text('Log out'),
+            ),
           ),
         ],
       ),
@@ -114,8 +128,19 @@ class Page2Screen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(title: Text('Document screen')),
       body: Center(
-        child: Text(highlightedId != null ? 'Highlighted Document ID: $highlightedId' : 'No document highlighted'),
+        child: Column(
+          children: [
+            Text(highlightedId != null ? 'Highlighted Document ID: $highlightedId' : 'No document highlighted'),
+            ElevatedButton(
+              onPressed: () {
+                context.go('/');
+              },
+              child: Text('Go to home'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -134,6 +159,29 @@ class LoginPage extends ConsumerWidget {
             ref.read(authRepositoryProvider).logIn(username: 'Test');
           },
           child: const Text('Log in'),
+        ),
+      ),
+    );
+  }
+}
+
+class ErrorScreen extends StatelessWidget {
+  const ErrorScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text('Page does not exist')),
+      body: Center(
+        child: Column(
+          children: [
+            ElevatedButton(
+              onPressed: () {
+                context.go('/');
+              },
+              child: Text('Go Home'),
+            ),
+          ],
         ),
       ),
     );
